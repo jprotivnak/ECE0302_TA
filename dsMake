@@ -132,14 +132,19 @@ individualDirs () {
 
 mossCheck () {
 	cd $originalDir
+	for i in $(ls mossFiles/); do
+		if [[ ${i: -4} != ".txt" ]]; then
+			inclusions="$inclusions -b mossFiles/$i"
+		fi
+	done
 	if [[ -f mossFiles/*.tpp ]]; then
-		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -b mossFiles/*.tpp -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.tpp > moss.txt;
+		sudo moss.pl -l cc -c "$workingDir MOSS Report"${inclusions} -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.tpp > moss.txt;
 	elif [[ -f mossFiles/*.txx ]]; then
-		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -b mossFiles/*.txx -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.txx > moss.txt;
+		sudo moss.pl -l cc -c "$workingDir MOSS Report"${inclusions} -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.txx > moss.txt;
 	elif [[ -f mossFiles/*.tpp && -f mossFiles/*.txx ]]; then
-		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -b mossFiles/*.tpp -b mossFiles/*.txx -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.tpp $workingDir/*/*.txx > moss.txt;
+		sudo moss.pl -l cc -c "$workingDir MOSS Report"${inclusions} -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.tpp $workingDir/*/*.txx > moss.txt;
 	else
-		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp > moss.txt;
+		sudo moss.pl -l cc -c "$workingDir MOSS Report"${inclusions} -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp > moss.txt;
 	fi
 }
 
