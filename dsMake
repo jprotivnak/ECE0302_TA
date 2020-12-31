@@ -17,7 +17,7 @@ fi
 usage () {
 	echo ""
 	echo "Usage:"
-	echo "./customMake"
+	echo "./dsMake"
 	echo "Example path to zip file: '/home/TA/submissions.zip'"
 	echo "Note: this script only needs the relative path to files: './file1 ./file2 ../../file3 mossFiles/file4'"
 	echo "The directory 'mossFiles' will be automatically generated if it does not exist. Place all files that you would like to be copied, if they do not exist, to a student's submission in this dir (ex: CMakeLists.txt). These files will be used for the MOSS Plagiarism check as well. Please ensure they are the original UNMODIFIED versions of the files provided to students."
@@ -35,6 +35,8 @@ readFiles () {
 }
 
 setup () {
+	echo ""
+	echo -e "Current contents of mossFiles: \n$(ls mossFiles/)"
 	echo ""
 	read -p "Place all files to be used in MOSS check and to be copied if they do not exist in mossFiles. Press enter when ready..." enterVal
 	echo ""
@@ -116,7 +118,7 @@ individualDirs () {
 		# Run CMake
 		if [[ -f "CMakeLists.txt" ]]; then
 			echo "Running CMake on $i"
-			cmake . &> /dev/null 2>&1;
+			cmake . > /dev/null 2>&1;
 		else
 			echo "$i missing CMakeLists.txt"
 			touch NO_CMAKELISTS.TXT_FILE
@@ -125,6 +127,12 @@ individualDirs () {
 		echo "Running Make on $i"
 		make -j > /dev/null 2>&1
 
+		if [[ $mossValue == "y" && -f "catch.hpp" ]]; then
+			if [[ ! -f "$originalDir/mossFiles/catch.hpp" ]]; then
+				cp catch.hpp "$originalDir/mossFiles/"
+			fi
+			rm catch.hpp
+		fi
 		cd ..
 
 	done
@@ -133,7 +141,7 @@ individualDirs () {
 mossCheck () {
 	cd $originalDir
 	for i in $(ls mossFiles/); do
-		if [[ ${i: -4} != ".txt" ]]; then
+		if [[ ${i: -4} != ".txt" && $i != "catch.hpp" ]]; then
 			inclusions="$inclusions -b mossFiles/$i"
 		fi
 	done
@@ -148,6 +156,13 @@ mossCheck () {
 	fi
 }
 
+restoreCatch () {
+	cd $originalDir/$workingDir
+	for i in *; do
+		cp "$originalDir/mossFiles/catch.hpp" $i/
+	done
+}
+
 usage
 readFiles
 setup
@@ -157,5 +172,6 @@ if [[ $mossValue == "y" ]]; then
 	echo ""
 	echo "Running MOSS check. Please check $originalDir/moss.txt for results of upload and link to test."
 	mossCheck
+	restoreCatch
 	echo $(grep http $originalDir/moss.txt)
 fi
