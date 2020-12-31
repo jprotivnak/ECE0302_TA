@@ -1,0 +1,156 @@
+#!/bin/bash
+
+## This script will create a directory, copy and unzip the mass submission download to the directory, rename directories, copy missing files, run CMake, run Make, and execute a moss Plagiarism check. 
+
+## Changelog
+##
+## 12/20/20 JVP : Cleanup of original script
+## 12/31/20 JVP : Added more user-friendly features for file input. 
+##
+## END CHANGELOG
+
+originalDir=$(pwd)
+if [[ ! -d 'mossFiles' ]]; then 
+	mkdir mossFiles
+fi
+
+usage () {
+	echo ""
+	echo "Usage:"
+	echo "./customMake"
+	echo "Example path to zip file: '/home/TA/submissions.zip'"
+	echo "Note: this script only needs the relative path to files: './file1 ./file2 ../../file3 mossFiles/file4'"
+	echo "The directory 'mossFiles' will be automatically generated if it does not exist. Place all files that you would like to be copied, if they do not exist, to a student's submission in this dir (ex: CMakeLists.txt). These files will be used for the MOSS Plagiarism check as well. Please ensure they are the original UNMODIFIED versions of the files provided to students."
+	echo ""
+}
+
+readFiles () {
+	echo ""
+	read -p "Enter full path of zip file: " path
+
+	if [[ ! -f $path ]]; then
+		echo "File does not exist at location"
+		exit
+	fi
+}
+
+setup () {
+	echo ""
+	read -p "Place all files to be used in MOSS check and to be copied if they do not exist in mossFiles. Press enter when ready..." enterVal
+	echo ""
+	read -p "Would you like to run a MOSS Plagiarism check? [y/n]: " mossValue
+	echo ""
+	read -p "Enter name of directory for files to be unzipped to: " workingDir
+	while [[ -d $workingDir ]]; do
+		echo "ERROR: Directory already exists."
+		read -p "Enter name of directory for files to be unzipped to: " workingDir
+	done
+	echo ""
+	mkdir $workingDir
+	cp $path ${workingDir}/
+	cd $workingDir
+	unzip $(basename $path) > /dev/null 2>&1
+	if [[ $? -ne 0 ]]; then
+		echo "ERROR: Unzip unsuccessful. Please check zip file'."
+		exit
+	fi
+	rm -rf *.txt
+	rm -rf $(basename $path)
+}
+
+renameFiles () {
+	# Using sed to replace file name
+	for fname in *; do
+		username=$(echo "$fname" | sed 's/^[^_]*_//' | sed -r 's/_[^_]*//g');
+		if [[ ${fname: -4} == ".zip" ]]; then
+			mv "$fname" "$username"  > /dev/null 2>&1
+			if [ ! -d $username ]; then
+				mkdir temp > /dev/null 2>&1;
+				mv $username temp/$username.zip > /dev/null 2>&1;
+				mv temp/ $username > /dev/null 2>&1;
+				unzip $username/$username.zip -d $username/ > /dev/null 2>&1;
+				rm $username/$username.zip > /dev/null 2>&1;
+			fi
+		else
+			if [[ ! -d $username ]]; then
+				mkdir $username;
+			fi
+			mv "$fname" $username/$(echo $fname|sed -r "s/.+_[a-z]+_.+[0-9]{2}_//");
+		fi
+	done
+}
+
+# Create directory, copy zip file, unzip, remove old items, copy predefined files, run CMake, run Make
+individualDirs () {
+	# Using sed to replace file name
+	# Check for correct working dir
+	if [[ $(basename $(pwd)) != $workingDir ]]; then
+		echo "ERROR: bad present working directory"
+		exit
+	fi
+
+	# Create specific dirs by username
+	for i in *; do
+		echo "Working on $i"
+		cd $i;
+
+		## Remove old files that we will recreate/don't need
+		rm -rf __MACOSX CMakeFiles CMakeCache.txt Makefile
+
+		## If the student had a nested directory, remove it
+		if [[ $(ls|wc -l) == 1 && $(basename $(pwd)) == $i ]]; then
+			tempDir=$(ls);
+			if [[ -d "$tempDir" ]]; then
+				mv "$tempDir"/* .
+				rm -rf "$tempDir";
+			fi
+		fi
+
+		# Copy over defined files
+		for incl in ../../mossFiles/*; do 
+			if [[ -f $incl && ! -f $(basename $incl) ]]; then
+				cp $incl .
+			fi
+		done
+
+		# Run CMake
+		if [[ -f "CMakeLists.txt" ]]; then
+			echo "Running CMake on $i"
+			cmake . &> /dev/null 2>&1;
+		else
+			echo "$i missing CMakeLists.txt"
+			touch NO_CMAKELISTS.TXT_FILE
+		fi
+		
+		echo "Running Make on $i"
+		make -j > /dev/null 2>&1
+
+		cd ..
+
+	done
+}
+
+mossCheck () {
+	cd $originalDir
+	if [[ -f mossFiles/*.tpp ]]; then
+		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -b mossFiles/*.tpp -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.tpp > moss.txt;
+	elif [[ -f mossFiles/*.txx ]]; then
+		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -b mossFiles/*.txx -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.txx > moss.txt;
+	elif [[ -f mossFiles/*.tpp && -f mossFiles/*.txx ]]; then
+		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -b mossFiles/*.tpp -b mossFiles/*.txx -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp $workingDir/*/*.tpp $workingDir/*/*.txx > moss.txt;
+	else
+		sudo moss.pl -l cc -c "$workingDir MOSS Report" -b mossFiles/*.cpp -b mossFiles/*.hpp -m 4 -d $workingDir/*/*.cpp $workingDir/*/*.hpp > moss.txt;
+	fi
+}
+
+usage
+readFiles
+setup
+renameFiles
+individualDirs
+if [[ $mossValue == "y" ]]; then
+	echo ""
+	echo "Running MOSS check. Please check $originalDir/moss.txt for results of upload and link to test."
+	mossCheck
+	echo $(grep http $originalDir/moss.txt)
+fi
